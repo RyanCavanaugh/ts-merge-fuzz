@@ -18,14 +18,22 @@ namespace Makers {
         }
 
         function makeClassDecl() {
-            return `declare class ${randomId()} {\r\n` + repeatRandom(makeClassMember, 3, "\r\n") + "\r\n}\r\n";
+            return `declare class ${randomId()} ${maybe(makeExtends)} {\r\n` + repeatRandom(makeClassMember, 3, "\r\n") + "\r\n}\r\n";
         }
 
         function makeFunctionDecl() {
             return `declare function ${randomId()}(): void;`;
         }
 
-        const statements = [makeNamespace, makeClassDecl, makeFunctionDecl];
+        function makeConstDecl() {
+            return `declare const ${randomId()}: ${randomType()};`
+        }
+
+        function makeExtends() {
+            return `extends ${randomId()}`;
+        }
+
+        const statements = [makeNamespace, makeClassDecl, makeFunctionDecl, makeConstDecl];
 
         function prop() {
             return `${randomId()}: ${randomType()}`;
@@ -79,6 +87,18 @@ namespace Makers {
             }
         }
 
+        function makeClassExpression() {
+            return `class { constructor() { ${repeatRandom(makeJsConstructorStatement, 2)} } ${repeatRandom(makeJsClassMember, 3)}`;
+        }
+
+        function makeJsConstructorStatement() {
+            return `this.${randomId} = ${makeExpression()};`;
+        }
+
+        function makeJsClassMember() {
+            return `${randomId()}() { }`;
+        }
+
         function makeFunctionExpression() {
             return `function() { }`;
         }
@@ -95,6 +115,10 @@ namespace Makers {
             makeFunctionDeclaration,
             makeExpandoDeclaration
         ])();
+    }
+
+    function maybe(produce: () => string, likelihood = 0.5) {
+        return (Math.random() < likelihood) ? produce() : "";
     }
 
     function repeatRandom(produce: () => string, max: number, joiner = "\r\n") {
@@ -186,27 +210,45 @@ class MyHost implements ts.CompilerHost {
     }
 }
 
-const host = new MyHost();
-const names = ["file1.d.ts", "file2.js", "file3.d.ts", "file4.js"];
-const makers = [Makers.createDeclFile, Makers.createJsFile, Makers.createDeclFile, Makers.createJsFile];
-for (let i = 0; i < names.length; i++) {
-    host.update(names[i], makers[i]());
-}
-let oldProgram: ts.Program | undefined;
-while (true) {
-    const rnd = Math.floor(Math.random() * names.length);
-    host.update(names[rnd], makers[rnd]());
-    try {
-        oldProgram = ts.createProgram(host.getRootNames(), opts, host, oldProgram);
-        oldProgram.getTypeChecker();
+function run() {
 
-    } catch (e) {
+    const host = new MyHost();
+    const names = ["file1.d.ts", "file2.js", "file3.d.ts", "file4.js"];
+    const makers = [Makers.createDeclFile, Makers.createJsFile, Makers.createDeclFile, Makers.createJsFile];
+    for (let i = 0; i < names.length; i++) {
+        host.update(names[i], makers[i]());
+    }
+    let oldProgram: ts.Program | undefined;
+    let counter = 0;
+    let bigCounter = 0;
+    while (true) {
+        const rnd = Math.floor(Math.random() * names.length);
+        host.update(names[rnd], makers[rnd]());
+        try {
+            oldProgram = ts.createProgram(host.getRootNames(), opts, host, oldProgram);
+            oldProgram.getTypeChecker();
+        } catch (e) {
+            if (e.message === "Maximum call stack size exceeded") {
+                // OK
+            } else {
+                printFiles();
+                throw e;
+            }
+        }
+
+        if (counter++ === 10000) {
+            console.log(`At iteration ${++bigCounter}0000`);
+            printFiles();
+            counter = 0;
+        }
+    }
+
+    function printFiles() {
         for (let j = 0; j < names.length; j++) {
             console.log(`-- ${names[j]} --`);
             console.log(host.readFile(names[j]));
         }
-
-        throw e;
     }
 }
 
+run();
