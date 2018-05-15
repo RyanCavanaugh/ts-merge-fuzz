@@ -6,7 +6,7 @@ const opts: ts.CompilerOptions = {
 
 namespace Makers {
     const identifiers: ReadonlyArray<string> = ["a", "b", "c", "d", "prototype"];
-    const types: ReadonlyArray<string> = ["{}", "object", "string"];
+    const types: ReadonlyArray<string> = ["a", "b", "c", "d", "any", "{}", "object", "string", "{ 'a': any }"];
 
     export function createDeclFile() {
         return repeatRandom(getDeclFileStatement, 3, ";");
@@ -14,7 +14,7 @@ namespace Makers {
 
     function getDeclFileStatement() {
         function makeNamespace(): string {
-            return `declare namespace ${randomId()} {\r\n${repeatRandom(getDeclFileStatement, 2)}\r\n}`
+            return `declare namespace ${randomId()} {\r\n${repeatRandom(getAmbientDeclFileStatement, 2)}\r\n}`
         }
 
         function makeClassDecl() {
@@ -33,6 +33,18 @@ namespace Makers {
             return `extends ${randomId()}`;
         }
 
+        function makeAmbientFunctionDecl() {
+            return `function ${randomId()}(): void;`;
+        }
+
+        function makeAmbientConstDecl() {
+            return `const ${randomId()}: ${randomType()};`
+        }
+
+        function getAmbientDeclFileStatement() {
+            return randomElementOf([makeAmbientConstDecl, makeAmbientFunctionDecl])();
+        }
+
         const statements = [makeNamespace, makeClassDecl, makeFunctionDecl, makeConstDecl];
 
         function prop() {
@@ -41,7 +53,13 @@ namespace Makers {
         function method() {
             return `${randomId()}(): ${randomType()};`
         }
-        const members = [prop, method];
+        function staticProp() {
+            return `static ${randomId()}: ${randomType()};`
+        }
+        function staticMethod() {
+            return `static ${randomId()}(): ${randomType()};`
+        }
+        const members = [prop, method, staticProp, staticMethod];
 
         function makeClassMember() {
             return repeatRandom(() => randomElementOf(members)(), 3);
@@ -75,7 +93,9 @@ namespace Makers {
         function makeLValue() {
             return randomElementOf([
                 randomId,
-                () => `${randomId()}.${randomId()}`
+                () => `${randomId()}.${randomId()}`,
+                () => `${randomId()}.${randomId()}.${randomId()}`,
+                () => `${randomId()}.${randomId()}.${randomId()}.${randomId()}`,
             ])();
         }
 
@@ -227,13 +247,10 @@ function run() {
         try {
             oldProgram = ts.createProgram(host.getRootNames(), opts, host, oldProgram);
             oldProgram.getTypeChecker();
+            oldProgram.getSemanticDiagnostics();
         } catch (e) {
-            if (e.message === "Maximum call stack size exceeded") {
-                // OK
-            } else {
-                printFiles();
-                throw e;
-            }
+            printFiles();
+            throw e;
         }
 
         if (counter++ === 10000) {
